@@ -16,6 +16,7 @@ const status = document.getElementById('status');
 const steps = [];
 let isRunning = false;
 let cancelRequested = false;
+const pendingSleepCancels = new Set();
 
 function renderSteps() {
   stepsList.innerHTML = '';
@@ -76,25 +77,38 @@ function addAction() {
   renderSteps();
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function cancellableSleep(ms) {
+  return new Promise((resolve) => {
+    const timerId = setTimeout(() => {
+      pendingSleepCancels.delete(cancelSleep);
+      resolve();
+    }, ms);
+
+    const cancelSleep = () => {
+      clearTimeout(timerId);
+      pendingSleepCancels.delete(cancelSleep);
+      resolve();
+    };
+
+    pendingSleepCancels.add(cancelSleep);
+  });
 }
 
 async function executeStep(step) {
   if (step.type === 'key') {
     status.textContent = `実行中: ${step.key} を入力`;
-    await sleep(350);
+    await cancellableSleep(350);
     return;
   }
 
   if (step.type === 'mouse') {
     status.textContent = `実行中: ${step.button} クリック`;
-    await sleep(350);
+    await cancellableSleep(350);
     return;
   }
 
   status.textContent = `実行中: ${step.duration}ms 待機`;
-  await sleep(step.duration);
+  await cancellableSleep(step.duration);
 }
 
 function setRunningUI(running) {
@@ -137,6 +151,7 @@ addActionBtn.addEventListener('click', addAction);
 runBtn.addEventListener('click', runSequence);
 cancelBtn.addEventListener('click', () => {
   cancelRequested = true;
+  pendingSleepCancels.forEach((cancelSleep) => cancelSleep());
   status.textContent = 'キャンセル要求を受け付けました...';
 });
 clearBtn.addEventListener('click', () => {
