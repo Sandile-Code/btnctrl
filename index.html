@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>入力操作コントローラー</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header>
+        <h1>キーボード / マウス操作コントローラー</h1>
+        <p>手順を組んで実行し、必要に応じてループ・キャンセルできます。</p>
+      </header>
+
+      <section class="panel">
+        <h2>1. 操作を追加</h2>
+        <div class="grid">
+          <label>
+            種類
+            <select id="actionType">
+              <option value="key">キー入力</option>
+              <option value="mouse">マウスクリック</option>
+              <option value="wait">待機</option>
+            </select>
+          </label>
+
+          <label>
+            キー (例: Enter, A, Ctrl+S)
+            <input id="keyInput" type="text" placeholder="Enter" />
+          </label>
+
+          <label>
+            マウスボタン
+            <select id="mouseButton">
+              <option value="left">左クリック</option>
+              <option value="right">右クリック</option>
+              <option value="middle">中クリック</option>
+            </select>
+          </label>
+
+          <label>
+            待機時間 (ms)
+            <input id="waitInput" type="number" min="0" step="100" value="500" />
+          </label>
+        </div>
+
+        <button id="addActionBtn" class="primary">操作を追加</button>
+      </section>
+
+      <section class="panel">
+        <h2>2. 手順</h2>
+        <ol id="stepsList" class="steps"></ol>
+        <p id="emptyMessage" class="hint">まだ操作がありません。上で操作を追加してください。</p>
+      </section>
+
+      <section class="panel controls">
+        <h2>3. 実行</h2>
+        <label class="inline">
+          <input id="loopToggle" type="checkbox" />
+          ループ実行する
+        </label>
+
+        <div class="buttons">
+          <button id="runBtn" class="primary">開始</button>
+          <button id="cancelBtn" class="danger" disabled>キャンセル</button>
+          <button id="clearBtn">手順をクリア</button>
+        </div>
+
+        <p id="status" class="status">待機中</p>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
