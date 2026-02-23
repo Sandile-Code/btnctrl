@@ -74,16 +74,251 @@ function addAction() {
   }
 
   renderSteps();
+
+  if (type === 'key') {
+    keyInput.focus();
+    keyInput.select();
+  }
 }
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function normalizeKeyName(rawKey) {
+  const keyMap = {
+    up: 'ArrowUp',
+    down: 'ArrowDown',
+    left: 'ArrowLeft',
+    right: 'ArrowRight',
+    arrowup: 'ArrowUp',
+    arrowdown: 'ArrowDown',
+    arrowleft: 'ArrowLeft',
+    arrowright: 'ArrowRight',
+    '↑': 'ArrowUp',
+    '↓': 'ArrowDown',
+    '←': 'ArrowLeft',
+    '→': 'ArrowRight',
+    esc: 'Escape',
+    del: 'Delete',
+    space: ' ',
+  };
+
+  const trimmed = rawKey.trim();
+  if (!trimmed) return '';
+  const mapped = keyMap[trimmed.toLowerCase()];
+  if (mapped) return mapped;
+  if (trimmed.length === 1) return trimmed;
+  return trimmed[0].toUpperCase() + trimmed.slice(1);
+}
+
+
+function formatShortcut(parts) {
+  const segments = [];
+  if (parts.ctrlKey) segments.push('Ctrl');
+  if (parts.shiftKey) segments.push('Shift');
+  if (parts.altKey) segments.push('Alt');
+  if (parts.metaKey) segments.push('Meta');
+  segments.push(parts.key === ' ' ? 'Space' : parts.key);
+  return segments.join('+');
+}
+
+function parseKeyEventToShortcut(event) {
+  const parts = {
+    ctrlKey: event.ctrlKey,
+    shiftKey: event.shiftKey,
+    altKey: event.altKey,
+    metaKey: event.metaKey,
+    key: normalizeKeyName(event.key),
+  };
+
+  if (['Control', 'Shift', 'Alt', 'Meta'].includes(parts.key)) {
+    return '';
+  }
+
+  if (!parts.key) return '';
+  return formatShortcut(parts);
+}
+
+function parseShortcut(rawShortcut) {
+  const tokens = rawShortcut
+    .split('+')
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+  const parts = {
+    ctrlKey: false,
+    shiftKey: false,
+    altKey: false,
+    metaKey: false,
+    key: '',
+  };
+
+  tokens.forEach((token) => {
+    const lower = token.toLowerCase();
+
+    if (lower === 'ctrl' || lower === 'control') {
+      parts.ctrlKey = true;
+      return;
+    }
+
+    if (lower === 'shift') {
+      parts.shiftKey = true;
+      return;
+    }
+
+    if (lower === 'alt' || lower === 'option') {
+      parts.altKey = true;
+      return;
+    }
+
+    if (lower === 'meta' || lower === 'cmd' || lower === 'command' || lower === 'win') {
+      parts.metaKey = true;
+      return;
+    }
+
+    parts.key = normalizeKeyName(token);
+  });
+
+  if (!parts.key && tokens.length > 0) {
+    parts.key = normalizeKeyName(tokens[tokens.length - 1]);
+  }
+
+  return parts;
+}
+
+function getEventTarget() {
+  if (document.activeElement && document.activeElement !== document.body) {
+    return document.activeElement;
+  }
+  return document.body;
+}
+
+function isEditableElement(element) {
+  if (!(element instanceof HTMLElement)) return false;
+
+  return (
+    element.isContentEditable ||
+    element instanceof HTMLInputElement ||
+    element instanceof HTMLTextAreaElement
+  );
+}
+
+function moveCaretInTextControl(control, direction) {
+  if (!(control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement)) return;
+  if (typeof control.selectionStart !== 'number' || typeof control.selectionEnd !== 'number') return;
+
+  const current = control.selectionEnd;
+  const max = control.value.length;
+
+  if (direction === 'ArrowLeft') {
+    const next = Math.max(0, current - 1);
+    control.setSelectionRange(next, next);
+    return;
+  }
+
+  if (direction === 'ArrowRight') {
+    const next = Math.min(max, current + 1);
+    control.setSelectionRange(next, next);
+    return;
+  }
+
+  if (!(control instanceof HTMLTextAreaElement)) return;
+
+  const value = control.value;
+  const lineStart = value.lastIndexOf('\n', current - 1) + 1;
+  const lineEndCandidate = value.indexOf('\n', current);
+  const lineEnd = lineEndCandidate === -1 ? value.length : lineEndCandidate;
+  const column = current - lineStart;
+
+  if (direction === 'ArrowUp') {
+    if (lineStart === 0) return;
+    const prevLineEnd = lineStart - 1;
+    const prevLineStart = value.lastIndexOf('\n', prevLineEnd - 1) + 1;
+    const prevLineLength = prevLineEnd - prevLineStart;
+    const next = prevLineStart + Math.min(column, prevLineLength);
+    control.setSelectionRange(next, next);
+    return;
+  }
+
+  if (direction === 'ArrowDown') {
+    if (lineEnd >= value.length) return;
+    const nextLineStart = lineEnd + 1;
+    const nextLineEndCandidate = value.indexOf('\n', nextLineStart);
+    const nextLineEnd = nextLineEndCandidate === -1 ? value.length : nextLineEndCandidate;
+    const nextLineLength = nextLineEnd - nextLineStart;
+    const next = nextLineStart + Math.min(column, nextLineLength);
+    control.setSelectionRange(next, next);
+  }
+}
+
+function applyDefaultKeyBehavior(target, shortcut) {
+  if (shortcut.key.startsWith('Arrow')) {
+    if (isEditableElement(target)) {
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+        moveCaretInTextControl(target, shortcut.key);
+      }
+      return;
+    }
+
+    const amount = 50;
+    if (shortcut.key === 'ArrowUp') window.scrollBy({ top: -amount, behavior: 'smooth' });
+    if (shortcut.key === 'ArrowDown') window.scrollBy({ top: amount, behavior: 'smooth' });
+    if (shortcut.key === 'ArrowLeft') window.scrollBy({ left: -amount, behavior: 'smooth' });
+    if (shortcut.key === 'ArrowRight') window.scrollBy({ left: amount, behavior: 'smooth' });
+    return;
+  }
+
+  if (shortcut.key.length === 1 && isEditableElement(target)) {
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+      const start = target.selectionStart ?? target.value.length;
+      const end = target.selectionEnd ?? target.value.length;
+      const nextValue = `${target.value.slice(0, start)}${shortcut.key}${target.value.slice(end)}`;
+      target.value = nextValue;
+      const nextCursor = start + shortcut.key.length;
+      target.setSelectionRange(nextCursor, nextCursor);
+      target.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+}
+
+async function executeKeyStep(rawShortcut) {
+  const shortcut = parseShortcut(rawShortcut);
+
+  if (!shortcut.key) {
+    status.textContent = `実行失敗: ${rawShortcut} は無効なキー指定です`;
+    await sleep(350);
+    return;
+  }
+
+  const target = getEventTarget();
+  const eventInit = {
+    key: shortcut.key,
+    ctrlKey: shortcut.ctrlKey,
+    shiftKey: shortcut.shiftKey,
+    altKey: shortcut.altKey,
+    metaKey: shortcut.metaKey,
+    bubbles: true,
+    cancelable: true,
+  };
+
+  status.textContent = `実行中: ${rawShortcut} を入力`;
+
+  const keydownEvent = new KeyboardEvent('keydown', eventInit);
+  const keydownHandled = target.dispatchEvent(keydownEvent);
+
+  if (keydownHandled) {
+    applyDefaultKeyBehavior(target, shortcut);
+  }
+
+  await sleep(80);
+  target.dispatchEvent(new KeyboardEvent('keyup', eventInit));
+  await sleep(180);
+}
+
 async function executeStep(step) {
   if (step.type === 'key') {
-    status.textContent = `実行中: ${step.key} を入力`;
-    await sleep(350);
+    await executeKeyStep(step.key);
     return;
   }
 
@@ -132,6 +367,23 @@ async function runSequence() {
   status.textContent = cancelRequested ? 'キャンセルされました。' : '完了しました。';
   setRunningUI(false);
 }
+
+actionType.addEventListener('change', () => {
+  if (actionType.value === 'key') {
+    keyInput.focus();
+    keyInput.select();
+  }
+});
+
+keyInput.addEventListener('keydown', (event) => {
+  const shortcut = parseKeyEventToShortcut(event);
+  if (!shortcut) return;
+
+  event.preventDefault();
+  keyInput.value = shortcut;
+  keyInput.focus();
+  keyInput.select();
+});
 
 addActionBtn.addEventListener('click', addAction);
 runBtn.addEventListener('click', runSequence);
